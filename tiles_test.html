@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+#map {
+	height: 1080px;
+	width: 100%;
+}
+</style>
+</head>
+<body>
+<h3>My Google Maps Demo</h3>
+<div id="map"></div>
+<script>
+
+var mPoints = [
+	{
+		lat: 55.750062,
+		lng: 37.622150,
+	}
+];
+
+function tile2long(x, z) { 
+	return (x/Math.pow(2,z)*360-180); 
+}
+
+function tile2lat(y, z) {
+	var n=Math.PI-2*Math.PI*y/Math.pow(2,z);
+	return (180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))));
+}
+
+/** @constructor */
+function CoordMapType(tileSize) {
+	this.tileSize = tileSize;
+}
+
+CoordMapType.prototype.getTile = function(coord, zoom, ownerDocument) {
+	var canvas = ownerDocument.createElement("canvas");
+	canvas.width = this.tileSize.width;
+	canvas.height = this.tileSize.height;
+	
+	if(mPoints.length == 0){
+		return canvas;
+	}
+	
+	var x = coord.x;
+	var y = coord.y;
+	//Рассчитываем границы тайла в полярных координатах, делаем запас на 0.5 тайла, чтобы круги корректно отрисовывались на стыках тайлов
+	var sz = 0.5; 
+	var latT = tile2lat(y - sz, zoom);
+	var latB = tile2lat(y + sz + 1.0, zoom);
+	var lonR = tile2long(x + sz + 1.0, zoom);
+	var lonL = tile2long(x - sz, zoom);
+	
+	var tilelatT = tile2lat(y, zoom);
+	var tilelatB = tile2lat(y + 1.0, zoom);
+	var tilelonR = tile2long(x + 1.0, zoom);
+	var tilelonL = tile2long(x, zoom);
+	
+	var minLat;
+	var minLon;
+	var maxLat;
+	var maxLon;
+	
+	if(latB < latT) {
+		minLat = latB;
+		maxLat = latT;
+	} else {
+		minLat = latT;
+		maxLat = latB;
+	}
+
+	if(lonL < lonR) {
+		minLon = lonL;
+		maxLon = lonR;
+	} else {
+		minLon = lonR;
+		maxLon = lonL;
+	}
+	
+	//Выбираем из массива тайлов только те, которые попадают в этот тайл. Quadtree для наших целей избыточно.
+	var pointsInTile = [];
+	for(var i = 0; i < mPoints.length; i++){
+		var p = mPoints[i];
+		if ( !(p.lat < maxLat && p.lat > minLat && p.lng < maxLon && p.lng > minLon)) //Координата круга не попала в тайл
+			continue;
+		pointsInTile.push(p);
+	}
+	var points2draw = null;
+	var count = pointsInTile.length;
+	
+	var dlat = tilelatB - tilelatT;
+	var dlon = tilelonR - tilelonL;
+	var context = canvas.getContext("2d");
+	var drawCycles = 0;
+	
+	for(var i = 0; i < count; i ++) {
+		var point = pointsInTile[i]; 
+		var posx = canvas.width * (point.lng - tilelonL) / dlon;
+		var posy = canvas.height * (point.lat - tilelatT) / dlat;
+		var radius = 20;
+		context.fillStyle = "rgba(255, 0, 0, 0.7)";
+		context.beginPath();
+		context.arc(posx, posy, radius, 0, 2 * Math.PI);
+		context.fill();
+		drawCycles++;
+	}
+	console.log(drawCycles);
+	
+	context.closePath();
+	return canvas;
+};
+
+function initMap() {
+	//Заполняем массив с тайлами тестовыми данными
+	for(var i = 0; i < 9000; i++){
+		mPoints.push({
+			lat: 55.750062 + 0.1 * Math.sin(i / 100),
+			lng: 37.622150 + 0.001 * i
+		});
+	}
+
+	var centerPoint = {lat: mPoints[0].lat, lng: mPoints[0].lng};
+	var map = new google.maps.Map(document.getElementById('map'), {
+		zoom: 12,
+		center: centerPoint,
+		mapTypeId: google.maps.MapTypeId.HYBRID
+	});
+	
+	map.overlayMapTypes.push(new CoordMapType(new google.maps.Size(256, 256)));
+}
+
+</script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDGY1Dw6cGJAYFsXUab3WYkh96Uw-Sem2I&callback=initMap">
+</script>
+</body>
+</html>
